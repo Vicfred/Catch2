@@ -43,7 +43,7 @@ namespace Catch {
 
     auto StringRef::substr( size_type start, size_type size ) const noexcept -> StringRef {
         if (start < m_size) {
-            return StringRef(m_start + start, std::min(m_size - start, size));
+            return StringRef(m_start + start, (std::min)(m_size - start, size));
         } else {
             return StringRef();
         }
