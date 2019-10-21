@@ -16,45 +16,20 @@ namespace Catch {
 
     /// A non-owning string class (similar to the forthcoming std::string_view)
     /// Note that, because a StringRef may be a substring of another string,
-    /// it may not be null terminated. c_str() must return a null terminated
-    /// string, however, and so the StringRef will internally take ownership
-    /// (taking a copy), if necessary. In theory this ownership is not externally
-    /// visible - but it does mean (substring) StringRefs should not be shared between
-    /// threads.
+    /// it may not be null terminated.
     class StringRef {
     public:
         using size_type = std::size_t;
         using const_iterator = const char*;
 
     private:
-        friend struct StringRefTestAccess;
-
-        char const* m_start;
-        size_type m_size;
-
-        char* m_data = nullptr;
-
-        void takeOwnership();
-
         static constexpr char const* const s_empty = "";
 
+        char const* m_start = s_empty;
+        size_type m_size = 0;
+
     public: // construction/ assignment
-        StringRef() noexcept
-        :   StringRef( s_empty, 0 )
-        {}
-
-        StringRef( StringRef const& other ) noexcept
-        :   m_start( other.m_start ),
-            m_size( other.m_size )
-        {}
-
-        StringRef( StringRef&& other ) noexcept
-        :   m_start( other.m_start ),
-            m_size( other.m_size ),
-            m_data( other.m_data )
-        {
-            other.m_data = nullptr;
-        }
+        StringRef() noexcept = default;
 
         StringRef( char const* rawChars ) noexcept;
 
@@ -68,18 +43,6 @@ namespace Catch {
             m_size( stdString.size() )
         {}
 
-        ~StringRef() noexcept {
-            delete[] m_data;
-        }
-
-        auto operator = ( StringRef const &other ) noexcept -> StringRef& {
-            delete[] m_data;
-            m_data = nullptr;
-            m_start = other.m_start;
-            m_size = other.m_size;
-            return *this;
-        }
-
         explicit operator std::string() const {
             return std::string(m_start, m_size);
         }
@@ -88,7 +51,9 @@ namespace Catch {
 
     public: // operators
         auto operator == ( StringRef const& other ) const noexcept -> bool;
-        auto operator != ( StringRef const& other ) const noexcept -> bool;
+        auto operator != (StringRef const& other) const noexcept -> bool {
+            return !(*this == other);
+        }
 
         auto operator[] ( size_type index ) const noexcept -> char {
             assert(index < m_size);
@@ -103,22 +68,24 @@ namespace Catch {
             return m_size;
         }
 
+        // Returns the current start pointer. If the StringRef is not
+        // null-terminated, throws std::domain_exception
         auto c_str() const -> char const*;
 
     public: // substrings and searches
-        auto substr( size_type start, size_type size ) const noexcept -> StringRef;
+        // Returns a substring of [start, start + length).
+        // If start + length > size(), then the substring is [start, size()).
+        // If start > size(), then the substring is empty.
+        auto substr( size_type start, size_type length ) const noexcept -> StringRef;
 
-        // Returns the current start pointer.
-        // Note that the pointer can change when if the StringRef is a substring
-        auto currentData() const noexcept -> char const*;
+        // Returns the current start pointer. May not be null-terminated.
+        auto data() const noexcept -> char const*;
+
+        auto isNullTerminated() const noexcept -> bool;
 
     public: // iterators
         const_iterator begin() const { return m_start; }
         const_iterator end() const { return m_start + m_size; }
-
-    private: // ownership queries - may not be consistent between calls
-        auto isOwned() const noexcept -> bool;
-        auto isSubstring() const noexcept -> bool;
     };
 
     auto operator += ( std::string& lhs, StringRef const& sr ) -> std::string&;
@@ -128,7 +95,6 @@ namespace Catch {
     inline auto operator "" _sr( char const* rawChars, std::size_t size ) noexcept -> StringRef {
         return StringRef( rawChars, size );
     }
-
 } // namespace Catch
 
 inline auto operator "" _catch_sr( char const* rawChars, std::size_t size ) noexcept -> Catch::StringRef {
